@@ -78,4 +78,30 @@ final class TrackerTests: XCTestCase {
         let summary = DailySummary(activities: [sleep], day: day, now: nextDay, calendar: calendar)
         XCTAssertEqual(summary.sleepSeconds, 23 * 3600)
     }
+
+    func testOverlappingCaregiverSleepLogsCountTimeOnce() {
+        let id = UUID()
+        let earlier = Activity(childID: id, startedAt: now.addingTimeInterval(-3600), endedAt: now.addingTimeInterval(-600), details: .sleep)
+        let later = Activity(childID: id, startedAt: now.addingTimeInterval(-1800), endedAt: now, details: .sleep)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        XCTAssertEqual(DailySummary(activities: [earlier, later], day: now, now: now, calendar: calendar).sleepSeconds, 3600)
+    }
+
+    func testMidnightCareBelongsOnlyToTheNewDay() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let midnight = calendar.startOfDay(for: now)
+        let childID = UUID()
+        let records = [
+            Activity(childID: childID, startedAt: midnight, details: .diaper(.wet)),
+            Activity(childID: childID, startedAt: midnight, details: .feeding(kind: .bottle, milliliters: 60, side: nil, minutes: nil))
+        ]
+        let previous = DailySummary(activities: records, day: midnight.addingTimeInterval(-1), now: now, calendar: calendar)
+        let current = DailySummary(activities: records, day: midnight, now: now, calendar: calendar)
+        XCTAssertEqual(previous.feedings, 0)
+        XCTAssertEqual(previous.diapers, 0)
+        XCTAssertEqual(current.feedings, 1)
+        XCTAssertEqual(current.diapers, 1)
+    }
 }

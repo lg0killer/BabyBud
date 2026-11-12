@@ -1,0 +1,6 @@
+// Copy to Signing.local.xcconfig and use your registered identifiers.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+BABYBUDDY_BUNDLE_IDENTIFIER = com.yourfamily.BabyBuddy
+BABYBUDDY_CLOUD_CONTAINER = iCloud.com.yourfamily.BabyBuddy
+BABYBUDDY_ENTITLEMENTS = iOS/BabyBuddy.entitlements
+BABYBUDDY_MAC_ENTITLEMENTS = iOS/BabyBuddyMac.entitlements

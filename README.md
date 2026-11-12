@@ -1,82 +1,75 @@
-# Baby Buddy for iPhone
+# Baby Buddy for iPhone and Mac
 
-A native SwiftUI starting point for offline infant care tracking. All implementation code here is original; no Baby Buddy code or assets have been copied.
+A native SwiftUI infant tracker that works offline, with iCloud family sharing as the priority. No self-hosted backend or API account is required.
 
+## Current build
 
-## Implemented in this first milestone
+The installed phone build is **0.1.0 (1)**. Current source is the **0.1.1 (2)** candidate, adding permission checks and account-change guards; it has not replaced the phone build yet.
 
-- Create and edit one child's name and birth date.
-- Log bottle feeds in milliliters, breastfeeds by side and minutes, and wet/dirty/mixed diapers.
-- Start and stop a sleep timer. The start timestamp is persisted, including across app restarts.
-- See today's feeding count, diaper count and sleep duration, plus recent activity.
-- View history, edit saved entries, and confirm deletions.
-- Save every successful change to a local JSON file with an atomic write. On iOS, the file uses complete file protection.
-- Validate times, measurements, record IDs, child references and duplicate running sleep timers.
-- Preserve an unreadable data file and block writes rather than replacing it with an empty history.
+- Create and edit a child profile; select among profiles received through iCloud.
+- Log bottle feeds, breastfeeding by side and duration, and wet/dirty/mixed diapers.
+- Start and stop sleep, including across app restarts.
+- View daily totals and activity history; edit and confirm deletions.
+- Save to a local Core Data SQLite database after every successful change.
+- Import the prototype's JSON records without changing IDs or deleting the original file.
+- Preserve concurrent additions and reject stale edits rather than overwriting them.
+- Keep simultaneous offline sleep timers usable and count overlapping sleep only once.
+- Provide App Intents for feeding, diaper changes and last-sleep queries, with device authentication.
+- Include CKShare creation, caregiver management, invitation acceptance and private/shared stores.
 
-**iCloud sync and invitations are not implemented.** The Family tab states this explicitly. This version stores records only on the device, has no export/restore screen yet, and is an early development build. Use test data until the build and persistence behavior have been verified on a Mac and iPhone.
+**Sharing code is implemented but has not been verified with two Apple Accounts.** The default project is a local testing build; iCloud remains disabled until a developer team and container are configured. Use test data until the device acceptance checks below pass.
 
-## Open on a Mac
+The supplied specification also calls for tummy time, solids, feeding timers, widgets, Live Activities, analytics and local reminders. Those remain unfinished.
 
-1. Copy this folder to a Mac with Xcode 15 or later and the iOS 17 SDK or later.
-2. Open `BabyBuddy.xcodeproj` and select the **BabyBuddy** scheme.
-3. Select an iPhone simulator and press Run.
-4. For a physical iPhone, open the target's **Signing & Capabilities**, choose your development team, and replace `org.example.BabyBuddy` with a unique bundle identifier. Then select your iPhone and Run.
+## Run and install
 
-The checked-in project needs no external dependencies or project generator. It targets iOS 17 and later. The app icon and distribution configuration are still to be added.
+Open `BabyBuddy.xcodeproj`, choose the **BabyBuddy** scheme, select an iPhone simulator or **My Mac (Mac Catalyst)**, and Run. The deployment target is iOS 17. There are no external dependencies.
 
-If Swift source files are added or removed, regenerate the project before reapplying local signing changes:
+For physical phones and iCloud setup, follow [INSTALL.md](INSTALL.md). A free Personal Team supports temporary local device tests. iCloud/CloudKit requires Apple Developer Program membership. Your app should not be treated as ready for family use until both phones pass the sharing checks.
+
+Signing overrides belong in the ignored `Config/Signing.local.xcconfig`. They survive regeneration:
 
 ```sh
 python3 tools/generate_xcode_project.py
 ```
 
-The generator rewrites the project configuration and shared scheme, including resetting its bundle identifier to the development placeholder.
+The generated project reads `Config/Development.xcconfig` and the optional local overrides. Do not store Apple passwords or private keys in these files.
 
 ## Verification
 
-On a Mac, run the Foundation-only domain and persistence tests from this folder:
+Use the full Xcode toolchain if Command Line Tools is selected globally:
 
 ```sh
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 swift test
-```
-
-Build the app for a simulator without signing:
-
-```sh
 xcodebuild -project BabyBuddy.xcodeproj -scheme BabyBuddy \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project BabyBuddy.xcodeproj -scheme BabyBuddy \
+  -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO test
 ```
 
-The package tests cover disk round trips, timer restoration, corrupt-file preservation, failed-save preservation, invalid entries, duplicate records, midnight splitting, and the 23-hour spring daylight-saving day in Stockholm. They do not exercise SwiftUI or the app store object.
+The most recent package run passed 25 tests: validation, disk round trips, timer restoration, JSON migration, corrupt-file preservation, simultaneous caregiver additions, stale edits, simultaneous offline timers, overlapping sleep, midnight counts, daylight-saving boundaries, permission failures, transaction rollback, removed-family records, stale open forms and account-change UI masking. These are local database tests, not proof of network synchronization.
 
-This workspace was initialized on Windows without Swift or Xcode. **The Swift tests and iOS build have not been run here.** The project generator and project source/scheme wiring have been checked locally.
+The iPhone simulator, physical-iPhone (unsigned), and Mac Catalyst builds succeeded. The Mac app launches. Both automated simulator UI tests pass: profile creation, feeding and diaper logging, sleep-timer restoration after relaunch, invalid-entry handling and cancellation. The tests use isolated databases. The installed 0.1.0 result bundle is `/tmp/babybud-ui-tests-3`. The 0.1.1 candidate also passes both UI tests; its result bundle is `/tmp/babybud-ui-tests-4`. The candidate Mac build succeeds too.
 
-Manual checks for the first Mac/iPhone run:
+Signed-device installation and launch have been verified. Two-account iCloud synchronization remains unverified.
 
-1. Create a child, log a bottle and a diaper, and verify both the dashboard and history update.
-2. Log a breastfeeding entry with a decimal duration (including a comma decimal separator with a Swedish device locale).
-3. Start sleep, terminate and reopen the app, then stop sleep. Verify only one sleep record exists and the elapsed time includes the time the app was closed.
-4. Edit an activity and cancel another edit. Verify only the saved edit is retained after relaunch.
-5. Delete an activity using the history swipe action, confirm, and verify it stays deleted after relaunch.
-6. Check large text, VoiceOver, dark appearance, and landscape layout.
+## Persistence and sharing architecture
 
-## Structure and persistence choice
+`Sources/BabyBuddyCore` contains the Codable domain types, validation, daily calculations, persistence repositories and the observable app store shared by the UI and App Intents. `iOS` contains SwiftUI, App Intents and the sharing controllers. The same core sources are compiled into the app and Swift package tests.
 
-`Sources/BabyBuddyCore` contains Codable value models, validation, day calculations and a small `SnapshotRepository` interface. The same sources are compiled into the iOS target and independently exercised through a Swift package test target.
+The specification proposes SwiftData. This implementation uses Apple's documented **Core Data + NSPersistentCloudKitContainer + CKShare** approach to support sharing between distinct caregiver accounts. SwiftData's automatic private sync is not assumed to provide that invitation flow. See [Apple's sharing documentation](https://developer.apple.com/documentation/coredata/sharing-core-data-objects-between-icloud-users).
 
-`iOS` contains the SwiftUI app and a main-actor observable store. Mutations are validated and saved before becoming visible in memory. The file is located at `Application Support/BabyBuddy/records.json` inside the app sandbox. Occurrence time is separate from creation/edit timestamps; IDs are stable UUIDs.
+Each child and activity is a separate managed object. Relationships connect activities to their child's share. Private and shared SQLite stores live under `Application Support/BabyBuddy/`. The retained `records.json` is a legacy backup, not the active database. The iOS database uses system file protection; this is not a claim of custom database encryption or end-to-end encryption of shared CloudKit records.
 
-The plan proposed SwiftData. This first slice deliberately uses a small JSON repository to keep local persistence replaceable while the sharing architecture is proven. It is not a synchronization implementation: a whole-file store must not be used to merge family changes. Keep the user interface and domain model, then replace the storage layer with a persistence approach chosen alongside the CloudKit proof of concept. Apple's [Core Data sharing sample](https://developer.apple.com/documentation/coredata/sharing-core-data-objects-between-icloud-users) and [direct CloudKit sharing sample](https://github.com/apple/sample-cloudkit-sharing) provide two concrete options to evaluate.
+Only changed records are saved. Local stale edits are rejected. CloudKit's eventual conflict behavior, account changes and share revocation must still be exercised on real accounts; local tests do not prove those cases.
 
-## Next milestone: family-sharing proof
+## Local build artifacts
 
-Before adding charts or more activity types, test one shared child and feeding/diaper records across two Apple accounts:
+Generated applications, device-specific packages, screenshots and signing overrides stay local and are excluded from version control. Device packages must be provisioned for each intended device. Local Mac test builds are not notarized distribution packages.
 
-- Create a private share, invite a caregiver, and accept on the other device.
-- Verify records added from either account arrive on both devices.
-- Persist an offline change queue and test reconnects, retries, and duplicate prevention.
-- Test concurrent edits, tombstones for deletions, and caregiver removal.
-- Handle iCloud sign-out, account changes, and share revocation without leaking one family's records into another account.
+## Sharing hardening in the 0.1.1 candidate
 
-That milestone requires a Mac, configured CloudKit capabilities/container, appropriate Apple developer provisioning, and two iCloud accounts. The current target enables no iCloud capability and sends no records to a server.
+Writes and deletions check CloudKit permissions, and a denied operation rolls back the whole save. The UI disables care mutations for a read-only profile. Activity payloads must match their stored IDs and child relationships, preventing silent cross-profile routing. Background notifications schedule UI refreshes asynchronously instead of synchronously calling the main queue.
+
+An in-session iCloud account-change notification clears displayed records and blocks further operations until the app reopens. This is only an interim guard: **cold-start account isolation, sign-out/restart behavior and real share revocation still need two-account validation before family sharing can be considered ready**.

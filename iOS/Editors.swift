@@ -6,6 +6,7 @@ struct ChildProfileView: View {
     @State private var name = ""
     @State private var birthDate = Date()
     @State private var error: String?
+    @State private var originalChild: Child?
     var body: some View {
         NavigationStack {
             Form {
@@ -24,13 +25,14 @@ struct ChildProfileView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        if store.saveChild(name: name, birthDate: birthDate) { dismiss() }
+                        if store.saveChild(name: name, birthDate: birthDate, expected: originalChild) { dismiss() }
                         else { error = store.errorMessage; store.errorMessage = nil }
-                    }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (originalChild != nil && !store.canEditSelectedChild))
                 }
             }
             .onAppear {
-                if let child = store.selectedChild { name = child.name; birthDate = child.birthDate }
+                originalChild = store.selectedChild
+                if let child = originalChild { name = child.name; birthDate = child.birthDate }
             }
         }
     }
@@ -94,7 +96,9 @@ struct ActivityEditor: View {
             .navigationTitle(existing?.title ?? "Log activity")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Save", action: save) }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save", action: save).disabled(!store.canEditSelectedChild)
+                }
             }
             .onAppear(perform: populate)
         }
@@ -139,7 +143,7 @@ struct ActivityEditor: View {
         }
         do {
             try activity.validate()
-            if store.saveActivity(activity) { dismiss() }
+            if store.saveActivity(activity, expected: existing) { dismiss() }
             else { error = store.errorMessage; store.errorMessage = nil }
         } catch { self.error = error.localizedDescription }
     }

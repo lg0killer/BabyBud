@@ -1,0 +1,7 @@
+// Optional local overrides survive project regeneration.
+BABYBUDDY_BUNDLE_IDENTIFIER = org.example.BabyBuddy
+BABYBUDDY_CLOUD_CONTAINER =
+BABYBUDDY_ENTITLEMENTS =
+BABYBUDDY_MAC_ENTITLEMENTS =
+BABYBUDDY_PUSH_ENVIRONMENT = development
+#include? "Signing.local.xcconfig"

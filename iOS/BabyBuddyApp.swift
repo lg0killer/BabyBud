@@ -2,8 +2,13 @@ import SwiftUI
 
 @main
 struct BabyBuddyApp: App {
-    @StateObject private var store = TrackerStore()
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var store = TrackerStore.shared
     var body: some Scene {
-        WindowGroup { ContentView().environmentObject(store).tint(.teal) }
+        WindowGroup {
+            ContentView().environmentObject(store).tint(.teal)
+                .onChange(of: scenePhase) { _, phase in if phase == .active { store.reload() } }
+        }
     }
 }

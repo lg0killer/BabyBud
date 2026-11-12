@@ -6,17 +6,17 @@ struct Child: Identifiable, Codable, Equatable {
     var birthDate: Date
 }
 
-enum FeedingKind: String, Codable, CaseIterable, Identifiable {
+enum FeedingKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case bottle = "Bottle", breast = "Breast"
     var id: String { rawValue }
 }
 
-enum BreastSide: String, Codable, CaseIterable, Identifiable {
+enum BreastSide: String, Codable, CaseIterable, Identifiable, Sendable {
     case left = "Left", right = "Right", both = "Both"
     var id: String { rawValue }
 }
 
-enum DiaperKind: String, Codable, CaseIterable, Identifiable {
+enum DiaperKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case wet = "Wet", dirty = "Dirty", mixed = "Mixed"
     var id: String { rawValue }
 }
@@ -86,7 +86,7 @@ struct Snapshot: Codable, Equatable {
     var children: [Child] = []
     var activities: [Activity] = []
 
-    func validate(now: Date = Date()) throws {
+    func validate(now: Date = Date(), allowConcurrentSleepTimers: Bool = false) throws {
         guard version == 1 else { throw TrackerError.invalid("This data file requires a newer app version.") }
         guard Set(children.map(\.id)).count == children.count,
               Set(activities.map(\.id)).count == activities.count else {
@@ -102,7 +102,7 @@ struct Snapshot: Codable, Equatable {
             }
             try activity.validate(now: now)
         }
-        for child in children {
+        for child in children where !allowConcurrentSleepTimers {
             guard activities.filter({ $0.childID == child.id && $0.isRunningSleep }).count <= 1 else {
                 throw TrackerError.invalid("A child can only have one running sleep timer.")
             }
@@ -117,17 +117,29 @@ struct DailySummary {
 
     init(activities: [Activity], day: Date, now: Date = Date(), calendar: Calendar = .current) {
         guard let interval = calendar.dateInterval(of: .day, for: day) else { return }
+        var sleepIntervals: [DateInterval] = []
         for activity in activities {
             switch activity.details {
             case .feeding:
-                if interval.contains(activity.startedAt) { feedings += 1 }
+                if activity.startedAt >= interval.start && activity.startedAt < interval.end { feedings += 1 }
             case .diaper:
-                if interval.contains(activity.startedAt) { diapers += 1 }
+                if activity.startedAt >= interval.start && activity.startedAt < interval.end { diapers += 1 }
             case .sleep:
                 let start = max(activity.startedAt, interval.start)
                 let end = min(activity.endedAt ?? now, interval.end, now)
-                sleepSeconds += max(0, end.timeIntervalSince(start))
+                if end > start { sleepIntervals.append(DateInterval(start: start, end: end)) }
             }
         }
+        // Overlapping caregiver logs must not count the same minute twice.
+        var merged: DateInterval?
+        for interval in sleepIntervals.sorted(by: { $0.start < $1.start }) {
+            if let current = merged, interval.start <= current.end {
+                merged = DateInterval(start: current.start, end: max(current.end, interval.end))
+            } else {
+                sleepSeconds += merged?.duration ?? 0
+                merged = interval
+            }
+        }
+        sleepSeconds += merged?.duration ?? 0
     }
 }

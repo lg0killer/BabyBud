@@ -25,8 +25,10 @@ struct ContentView: View {
                         ContentUnavailableView {
                             Label("Unable to open records", systemImage: "externaldrive.badge.exclamationmark")
                         } description: {
-                            Text("Your saved file has been kept intact. Close and reopen the app, or try again.")
-                        } actions: { Button("Try again") { store.reload() } }
+                            Text(store.accountChanged ? store.syncStatus : "Your saved records have been kept intact. Close and reopen the app, or try again.")
+                        } actions: {
+                            if !store.accountChanged { Button("Try again") { store.reload() } }
+                        }
                     } else if let child = store.selectedChild {
                         dashboard(child)
                     } else {
@@ -59,6 +61,7 @@ struct ContentView: View {
                             .buttonStyle(.plain)
                             .swipeActions {
                                 Button("Delete", role: .destructive) { pendingDeletion = activity }
+                                    .disabled(!store.canEditSelectedChild)
                             }
                     }
                 }
@@ -67,21 +70,7 @@ struct ContentView: View {
             }
             .tabItem { Label("History", systemImage: "clock") }
 
-            NavigationStack {
-                Form {
-                    Section("Storage") {
-                        Label("Saved on this iPhone", systemImage: "iphone")
-                        Text("Records are saved locally after each change. iCloud sync and family invitations are not connected in this version.")
-                            .foregroundStyle(.secondary)
-                    }
-                    Section("Coming next") {
-                        Label("Private family sharing", systemImage: "person.2")
-                        Text("The next development milestone is to test CloudKit invitations and shared records on two iPhones.")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .navigationTitle("Family")
-            }
+            NavigationStack { FamilyView() }
             .tabItem { Label("Family", systemImage: "person.2") }
         }
         .sheet(isPresented: $showingProfile) { ChildProfileView() }
@@ -103,7 +92,7 @@ struct ContentView: View {
         ), titleVisibility: .visible) {
             Button("Delete activity", role: .destructive) {
                 if let activity = pendingDeletion {
-                    _ = store.commit { $0.activities.removeAll { $0.id == activity.id } }
+                    _ = store.deleteActivity(activity)
                 }
                 pendingDeletion = nil
             }
@@ -127,6 +116,10 @@ struct ContentView: View {
                         SummaryTile(title: "Sleep", value: durationText(summary.sleepSeconds), symbol: "moon.fill")
                     }
                     VStack(spacing: 12) {
+                        if store.runningSleepCount > 1 {
+                            Text("Both caregivers started sleep offline. End sleep will stop all active timers; overlapping time is counted once.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
                         HStack(spacing: 12) {
                             quickButton("Log feeding", symbol: "drop.fill") { entrySheet = .feeding }
                             quickButton("Log diaper", symbol: "leaf.fill") { entrySheet = .diaper }
@@ -144,6 +137,10 @@ struct ContentView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.indigo)
+                        .accessibilityLabel(store.runningSleep == nil ? "Start sleep" : "End sleep")
+                        .accessibilityValue(store.runningSleep.map { durationText(context.date.timeIntervalSince($0.startedAt)) } ?? "")
+                        .accessibilityIdentifier("sleep-toggle")
+                        .disabled(!store.canEditSelectedChild)
                     }
                     Text("Recent activity").font(.title2.bold())
                     if store.activities.isEmpty {
@@ -167,6 +164,7 @@ struct ContentView: View {
                 .font(.headline).frame(maxWidth: .infinity, minHeight: 64)
         }
         .buttonStyle(.bordered)
+        .disabled(!store.canEditSelectedChild)
     }
 }
 
